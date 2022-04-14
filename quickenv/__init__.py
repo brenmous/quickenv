@@ -76,15 +76,13 @@ def create(ctx, name, description=None, alias=None):
     subprocess.check_call([os.path.join(venv_path, 'bin', 'pip'), 'install', '-U', 'pip', 'setuptools'])
 
     description = "No description provided" if description is None else description
-    with open(os.path.join(venv_path, 'description.txt'), 'w') as f:
-        f.write("Created by quickenv script\n")
+    with open(os.path.join(venv_path, '.quickenv_description'), 'w') as f:
         f.write(description + '\n')
 
     with open(bash_aliases, 'a') as f:
         f.write(f'alias {alias}=". {venv_path}/bin/activate"\n')
 
-    with open(os.path.join(venv_path, 'alias.txt'), 'w') as f:
-        f.write("Created by quickenv script\n")
+    with open(os.path.join(venv_path, '.quickenv_alias'), 'w') as f:
         f.write(alias + '\n')
 
     click.echo(
@@ -106,8 +104,8 @@ def delete(ctx, name):
         click.echo('A virtual environment with this name does not exist.')
         sys.exit(126)
 
-    with open(os.path.join(venv_path, 'alias.txt'), 'r') as f:
-        alias = f.readlines()[1].strip()
+    with open(os.path.join(venv_path, '.quickenv_alias'), 'r') as f:
+        alias = f.read().strip()
 
     with open(os.path.join(os.path.expanduser('~'), '.bash_aliases'), 'r') as f:
         lines = [l for l in f.readlines()
@@ -134,10 +132,10 @@ def list(ctx):
     for name in sorted(ls):
         venv_path = os.path.join(path, name)
         if os.path.isdir(venv_path):
-            with open(os.path.join(venv_path, 'description.txt'), 'r') as f:
-                description = f.readlines()[1].strip()
-            with open(os.path.join(venv_path, 'alias.txt'), 'r') as f:
-                alias = f.readlines()[1].strip()
+            with open(os.path.join(venv_path, '.quickenv_description'), 'r') as f:
+                description = f.read().strip()
+            with open(os.path.join(venv_path, '.quickenv_alias'), 'r') as f:
+                alias = f.read().strip()
             click.echo(f"{name} (alias: {alias})")
             click.echo(f"  {description}")
 
