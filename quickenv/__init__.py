@@ -5,6 +5,7 @@ import venv
 import subprocess
 import sys
 import shutil
+from distutils.spawn import find_executable
 
 import click
 
@@ -42,9 +43,19 @@ def cli(ctx, path):
     type=str,
     help="Specify a custom alias (otherwise it will be the name of the venv)."
 )
+@click.option(
+    "-p",
+    "--python",
+    type=str,
+    help=(
+        "Python binary to create the virtual env from. Either a full path or the name of a binary "
+         "in your PATH. If not provided, the created venv will link to the binary that quickenv "
+         "is installed with."
+    )
+)
 @click.argument('name')
 @click.pass_context
-def create(ctx, name, description=None, alias=None):
+def create(ctx, name, description=None, alias=None, python=None):
     """
     Creates a new virtual environment.
     """
@@ -53,7 +64,7 @@ def create(ctx, name, description=None, alias=None):
         sys.exit(1)
 
     alias = alias if alias is not None else name
-    if ' ' in alias:
+    if not alias.isalnum():
         click.echo("Error: Aliases cannot contain spaces.")
         sys.exit(1)
 
@@ -63,15 +74,23 @@ def create(ctx, name, description=None, alias=None):
         click.echo('A virtual environment with this name already exists.')
         sys.exit(126)
 
-    bash_aliases = os.path.join(os.path.expanduser('~'), '.bash_aliases')
-    with open(bash_aliases, 'r') as f:
-        for line in f.readlines():
-            if line.startswith('alias {}='.format(alias)):
-                click.echo(f"Alias '{alias}' is already in use.")
-                sys.exit(126)
+    alias_file = os.path.join(path, 'aliases')
+    if os.path.exists(alias_file):
+        with open(alias_file, 'r') as f:
+            for line in f.readlines():
+                if line.startswith('alias {}='.format(alias)):
+                    click.echo(f"Alias '{alias}' is already in use.")
+                    sys.exit(126)
 
     click.echo("Creating...")
-    venv.create(venv_path, with_pip=True)
+    if python is not None:
+        bin = find_executable(python)
+        if bin is None:
+            click.echo(f"No python binary '{python}' could be found")
+            sys.exit(126)
+        subprocess.check_call([bin, '-m', 'venv', venv_path])
+    else:
+        venv.create(venv_path, with_pip=True)
     click.echo("Upgrading pip and setuptools...")
     subprocess.check_call([os.path.join(venv_path, 'bin', 'pip'), 'install', '-U', 'pip', 'setuptools'])
 
@@ -79,14 +98,21 @@ def create(ctx, name, description=None, alias=None):
     with open(os.path.join(venv_path, '.quickenv_description'), 'w') as f:
         f.write(description + '\n')
 
-    with open(bash_aliases, 'a') as f:
+    with open(alias_file, 'a') as f:
         f.write(f'alias {alias}=". {venv_path}/bin/activate"\n')
 
     with open(os.path.join(venv_path, '.quickenv_alias'), 'w') as f:
         f.write(alias + '\n')
 
+    with open(os.path.join(os.path.expanduser('~'), '.bash_aliases'), 'a+') as f:
+        f.seek(0)
+        lines = [l.strip('\n') for l in f.readlines()]
+        print(lines)
+        if "source ~/.quickenvs/aliases" not in lines:
+            f.write("source ~/.quickenvs/aliases\n")
+
     click.echo(
-        f"Done. Source '~/.bash_aliases' or start a new shell and run '{alias}' to activate the venv."
+        f"Done. Source '{alias_file}' or start a new shell and run '{alias}' to activate the venv."
     )
     sys.exit(0)
 
@@ -106,12 +132,12 @@ def delete(ctx, name):
 
     with open(os.path.join(venv_path, '.quickenv_alias'), 'r') as f:
         alias = f.read().strip()
-
-    with open(os.path.join(os.path.expanduser('~'), '.bash_aliases'), 'r') as f:
+    
+    alias_file = os.path.join(path, 'aliases')
+    with open(alias_file, 'r') as f:
         lines = [l for l in f.readlines()
                  if not l.startswith(f'alias {alias}=". {venv_path}/bin/activate"')]
-
-    with open(os.path.join(os.path.expanduser('~'), '.bash_aliases'), 'w') as f:
+    with open(alias_file, 'w') as f:
         f.writelines(lines)
 
     shutil.rmtree(venv_path)
